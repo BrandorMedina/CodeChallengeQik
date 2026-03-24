@@ -1,0 +1,140 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AccountType {
+  accountNumber: String!
+  balance: Float!
+  client: ClientType
+  createdAt: DateTime!
+  currency: String!
+  id: ID!
+  status: String!
+  updatedAt: DateTime!
+}
+
+type ClientType {
+  accounts: [AccountType!]
+  createdAt: DateTime!
+  documentId: String!
+  email: String!
+  firstName: String!
+  id: ID!
+  isActive: Boolean!
+  lastName: String!
+  phone: String
+  updatedAt: DateTime!
+}
+
+type ConversionResultType {
+  convertedAmount: Float!
+  fromCurrency: String!
+  originalAmount: Float!
+  rateType: String!
+  rateUsed: Float!
+  toCurrency: String!
+}
+
+input CreateAccountInput {
+  clientId: String!
+  currency: String!
+}
+
+input CreateClientInput {
+  documentId: String!
+  email: String!
+  firstName: String!
+  lastName: String!
+  phone: String
+}
+
+type CurrencyType {
+  code: String!
+  id: ID!
+  name: String!
+  symbol: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+input DepositInput {
+  accountId: String!
+  amount: Float!
+  currency: String!
+  description: String
+}
+
+type ExchangeRateType {
+  buyRate: Float!
+  createdAt: DateTime!
+  fromCurrency: CurrencyType!
+  id: ID!
+  sellRate: Float!
+  toCurrency: CurrencyType!
+}
+
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSON
+
+type Mutation {
+  createAccount(input: CreateAccountInput!): AccountType!
+  createClient(input: CreateClientInput!): ClientType!
+  deposit(input: DepositInput!): TransactionType!
+  removeClient(id: ID!): Boolean!
+  transfer(input: TransferInput!): TransactionType!
+  updateClient(id: ID!, input: UpdateClientInput!): ClientType!
+  withdrawal(input: WithdrawalInput!): TransactionType!
+}
+
+type Query {
+  account(id: ID!): AccountType!
+  accounts: [AccountType!]!
+  accountsByClient(clientId: ID!): [AccountType!]!
+  client(id: ID!): ClientType!
+  clients: [ClientType!]!
+  convertCurrency(amount: Float!, from: String!, to: String!): ConversionResultType!
+  currencies: [CurrencyType!]!
+  exchangeRates: [ExchangeRateType!]!
+  searchTransactions(query: String!): [JSON!]!
+  transactions: [TransactionType!]!
+  transactionsByAccount(accountId: ID!): [TransactionType!]!
+}
+
+type TransactionType {
+  amount: Float!
+  convertedAmount: Float
+  createdAt: DateTime!
+  currency: String!
+  description: String
+  destinationAccount: AccountType
+  destinationCurrency: String
+  exchangeRate: Float
+  id: ID!
+  rateType: String
+  sourceAccount: AccountType!
+  type: String!
+}
+
+input TransferInput {
+  amount: Float!
+  description: String
+  destinationAccountId: String!
+  sourceAccountId: String!
+}
+
+input UpdateClientInput {
+  firstName: String
+  lastName: String
+  phone: String
+}
+
+input WithdrawalInput {
+  accountId: String!
+  amount: Float!
+  description: String
+}
