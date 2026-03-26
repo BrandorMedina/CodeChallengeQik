@@ -62,7 +62,6 @@ services:
       postgres:
         condition: service_healthy
 
-    # 👇 CLAVE: migraciones antes de arrancar
     command: sh -c "
       echo 'Waiting for DB...' &&
       sleep 5 &&

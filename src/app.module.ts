@@ -34,9 +34,10 @@ import { SeedModule } from './seed/seed.module';
 
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      autoSchemaFile: true,
       sortSchema: true,
       playground: true,
+      introspection: true,
     }),
 
     CacheModule.registerAsync({

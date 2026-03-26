@@ -29,5 +29,5 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
-# 👇 Ejecuta migraciones antes de iniciar la app
+# Ejecuta migraciones antes de iniciar la app
 CMD ["sh", "-c", "node dist/main.js"]

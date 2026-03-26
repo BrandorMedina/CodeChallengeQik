@@ -1,0 +1,1701 @@
+{
+  "info": {
+    "_postman_id": "882cdbb9-2d6c-4c69-9036-cc131e52a2a4",
+    "name": "Banco Digital API",
+    "description": "Colección completa para probar todos los endpoints GraphQL del microservicio bancario.\n\n**Orden recomendado:**\n1. Health Check\n2. Currencies (ver monedas y tasas)\n3. Clients (crear clientes)\n4. Accounts (crear cuentas)\n5. Transactions (depósitos, retiros, transferencias)\n6. Search (ElasticSearch)\n\n**Variables de colección:**\n- `base_url`: http://localhost:3000/graphql\n- `client_id_1`, `client_id_2`: se llenan ejecutando Create Client\n- `account_id_dop`, `account_id_usd`, `account_id_eur`: se llenan ejecutando Create Account",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "13000804"
+  },
+  "item": [
+    {
+      "name": "00 - Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Overall status is ok', () => pm.expect(body.status).to.eql('ok'));",
+                  "pm.test('Database is up', () => pm.expect(body.info.database.status).to.eql('up'));",
+                  "pm.test('Redis is up', () => pm.expect(body.info.redis.status).to.eql('up'));",
+                  "pm.test('ElasticSearch is up', () => pm.expect(body.info.elasticsearch.status).to.eql('up'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{health_url}}",
+              "host": [
+                "{{health_url}}"
+              ]
+            },
+            "description": "Verifica que PostgreSQL, Redis, ElasticSearch y memoria estén OK.\n\nRespuesta esperada: status 'ok' con todos los servicios 'up'."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Currencies",
+      "item": [
+        {
+          "name": "Get All Currencies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No GraphQL errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Returns 3 currencies', () => pm.expect(body.data.currencies).to.have.lengthOf(3));",
+                  "const codes = body.data.currencies.map(c => c.code);",
+                  "pm.test('Has DOP', () => pm.expect(codes).to.include('DOP'));",
+                  "pm.test('Has USD', () => pm.expect(codes).to.include('USD'));",
+                  "pm.test('Has EUR', () => pm.expect(codes).to.include('EUR'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetCurrencies {\n  currencies {\n    id\n    code\n    name\n    symbol\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Lista las 3 monedas disponibles: DOP, USD, EUR."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exchange Rates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Returns 6 exchange rates', () => pm.expect(body.data.exchangeRates).to.have.lengthOf(6));",
+                  "const rates = body.data.exchangeRates;",
+                  "rates.forEach(r => {",
+                  "  pm.test(`Rate ${r.fromCurrency.code}→${r.toCurrency.code} has buyRate > 0`, () => pm.expect(r.buyRate).to.be.above(0));",
+                  "  pm.test(`Rate ${r.fromCurrency.code}→${r.toCurrency.code} has sellRate >= buyRate`, () => pm.expect(r.sellRate).to.be.at.least(r.buyRate));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetExchangeRates {\n  exchangeRates {\n    id\n    fromCurrency { code symbol }\n    toCurrency { code symbol }\n    buyRate\n    sellRate\n    createdAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Lista todas las tasas de cambio con precio de compra (buyRate) y venta (sellRate).\n\n- buyRate: precio al que el banco COMPRA la moneda extranjera\n- sellRate: precio al que el banco VENDE la moneda extranjera"
+          },
+          "response": []
+        },
+        {
+          "name": "Convert DOP to USD",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const result = body.data.convertCurrency;",
+                  "pm.test('From is DOP', () => pm.expect(result.fromCurrency).to.eql('DOP'));",
+                  "pm.test('To is USD', () => pm.expect(result.toCurrency).to.eql('USD'));",
+                  "pm.test('Original amount is 5900', () => pm.expect(result.originalAmount).to.eql(5900));",
+                  "pm.test('Converted amount is positive', () => pm.expect(result.convertedAmount).to.be.above(0));",
+                  "pm.test('Rate type is sell', () => pm.expect(result.rateType).to.eql('sell'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query ConvertDOPtoUSD {\n  convertCurrency(amount: 5900, from: \"DOP\", to: \"USD\") {\n    fromCurrency\n    toCurrency\n    originalAmount\n    convertedAmount\n    rateUsed\n    rateType\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Simula conversión de 5900 DOP a USD.\n\nDebe usar sellRate (banco vende USD al cliente).\nResultado esperado: ~100 USD"
+          },
+          "response": []
+        },
+        {
+          "name": "Convert USD to DOP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const result = body.data.convertCurrency;",
+                  "pm.test('Rate type is buy', () => pm.expect(result.rateType).to.eql('buy'));",
+                  "pm.test('Converted amount ~5750', () => pm.expect(result.convertedAmount).to.be.within(5600, 5900));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query ConvertUSDtoDOP {\n  convertCurrency(amount: 100, from: \"USD\", to: \"DOP\") {\n    fromCurrency\n    toCurrency\n    originalAmount\n    convertedAmount\n    rateUsed\n    rateType\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Simula conversión de 100 USD a DOP.\n\nDebe usar buyRate (banco compra USD del cliente).\nResultado esperado: ~5750 DOP"
+          },
+          "response": []
+        },
+        {
+          "name": "Convert EUR to USD (cross-currency)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const result = body.data.convertCurrency;",
+                  "pm.test('From EUR to USD', () => {",
+                  "  pm.expect(result.fromCurrency).to.eql('EUR');",
+                  "  pm.expect(result.toCurrency).to.eql('USD');",
+                  "});",
+                  "pm.test('Converted amount is reasonable', () => pm.expect(result.convertedAmount).to.be.within(90, 120));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query ConvertEURtoUSD {\n  convertCurrency(amount: 100, from: \"EUR\", to: \"USD\") {\n    fromCurrency\n    toCurrency\n    originalAmount\n    convertedAmount\n    rateUsed\n    rateType\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Conversión cruzada EUR → USD via DOP.\n\nPrimer paso: EUR → DOP usando buyRate\nSegundo paso: DOP → USD usando sellRate\nResultado esperado: ~107 USD"
+          },
+          "response": []
+        },
+        {
+          "name": "Convert Same Currency (DOP to DOP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const result = body.data.convertCurrency;",
+                  "pm.test('Converted equals original', () => pm.expect(result.convertedAmount).to.eql(result.originalAmount));",
+                  "pm.test('Rate is 1', () => pm.expect(result.rateUsed).to.eql(1));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query ConvertSameCurrency {\n  convertCurrency(amount: 1000, from: \"DOP\", to: \"DOP\") {\n    fromCurrency\n    toCurrency\n    originalAmount\n    convertedAmount\n    rateUsed\n    rateType\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Sin conversión — misma moneda, debe devolver el mismo monto."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Clients",
+      "item": [
+        {
+          "name": "Get All Clients (Seed Data)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const clients = body.data.clients;",
+                  "pm.test('At least 3 clients from seed', () => pm.expect(clients.length).to.be.at.least(3));",
+                  "if (clients.length > 0) {",
+                  "  pm.collectionVariables.set('client_id_1', clients[0].id);",
+                  "  pm.collectionVariables.set('client_id_2', clients[1].id);",
+                  "  pm.collectionVariables.set('client_id_3', clients[2].id);",
+                  "  if (clients[0].accounts && clients[0].accounts.length > 0) {",
+                  "    clients[0].accounts.forEach(acc => {",
+                  "      if (acc.currency === 'DOP') pm.collectionVariables.set('account_id_dop', acc.id);",
+                  "      if (acc.currency === 'USD') pm.collectionVariables.set('account_id_usd', acc.id);",
+                  "    });",
+                  "  }",
+                  "  if (clients[1].accounts && clients[1].accounts.length > 0) {",
+                  "    clients[1].accounts.forEach(acc => {",
+                  "      if (acc.currency === 'EUR') pm.collectionVariables.set('account_id_eur', acc.id);",
+                  "      if (acc.currency === 'DOP') pm.collectionVariables.set('account_id_dop_2', acc.id);",
+                  "    });",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetClients {\n  clients {\n    id\n    firstName\n    lastName\n    email\n    documentId\n    phone\n    isActive\n    accounts {\n      id\n      accountNumber\n      balance\n      currency\n      status\n    }\n    createdAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Lista todos los clientes con sus cuentas.\nDebe mostrar los 3 del seed: Juan, María, Carlos."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Client by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Client has id', () => pm.expect(body.data.client.id).to.not.be.empty);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetClient($id: ID!) {\n  client(id: $id) {\n    id\n    firstName\n    lastName\n    email\n    documentId\n    isActive\n    accounts {\n      id\n      accountNumber\n      balance\n      currency\n    }\n  }\n}",
+                "variables": "{\n  \"id\": \"{{client_id_1}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Busca un cliente por ID.\nUsa la variable client_id_1 (se llena ejecutando 'Get All Clients')."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const client = body.data.createClient;",
+                  "pm.test('Client created with id', () => pm.expect(client.id).to.not.be.empty);",
+                  "pm.test('isActive true by default', () => pm.expect(client.isActive).to.be.true);",
+                  "pm.collectionVariables.set('client_id_1', client.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateClient {\n  createClient(input: {\n    firstName: \"Pedro\"\n    lastName: \"Martínez\"\n    email: \"pedro.martinez@email.com\"\n    documentId: \"001-9999999-9\"\n    phone: \"809-555-0099\"\n  }) {\n    id\n    firstName\n    lastName\n    email\n    documentId\n    isActive\n    createdAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Crea un nuevo cliente."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Client - Duplicate Email (Error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Should have GraphQL error', () => pm.expect(body.errors).to.not.be.undefined);",
+                  "pm.test('Error is conflict', () => pm.expect(body.errors[0].message).to.include('already exists'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateClientDuplicateEmail {\n  createClient(input: {\n    firstName: \"Pedro\"\n    lastName: \"Martínez\"\n    email: \"pedro.martinez@email.com\"\n    documentId: \"001-0000000-0\"\n  }) {\n    id\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Intenta crear un cliente con email duplicado.\nDebe retornar error de conflicto (409)."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Client - Invalid Email (Validation Error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Should have validation error', () => pm.expect(body.errors).to.not.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateClientInvalidEmail {\n  createClient(input: {\n    firstName: \"Test\"\n    lastName: \"User\"\n    email: \"not-an-email\"\n    documentId: \"001-1111111-0\"\n  }) {\n    id\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Email inválido — debe fallar la validación del DTO."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Phone updated', () => pm.expect(body.data.updateClient.phone).to.eql('809-111-9999'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateClient($id: ID!) {\n  updateClient(id: $id, input: {\n    phone: \"809-111-9999\"\n    firstName: \"Pedro José\"\n  }) {\n    id\n    firstName\n    phone\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{client_id_1}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Actualiza datos de un cliente existente."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Client (Soft Delete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Returns true', () => pm.expect(body.data.removeClient).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RemoveClient($id: ID!) {\n  removeClient(id: $id)\n}",
+                "variables": "{\n  \"id\": \"{{client_id_1}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Soft delete — marca isActive=false sin eliminar el registro."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Client Not Found (Error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Should have error', () => pm.expect(body.errors).to.not.be.undefined);",
+                  "pm.test('Error mentions not found', () => pm.expect(body.errors[0].message).to.include('not found'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetClientNotFound {\n  client(id: \"00000000-0000-0000-0000-000000000000\") {\n    id\n    firstName\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Busca un cliente con UUID inválido — debe retornar NotFoundException."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Accounts",
+      "item": [
+        {
+          "name": "Get All Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('At least 5 accounts from seed', () => pm.expect(body.data.accounts.length).to.be.at.least(5));",
+                  "const accounts = body.data.accounts;",
+                  "accounts.forEach(acc => {",
+                  "  if (acc.currency === 'DOP' && !pm.collectionVariables.get('account_id_dop')) pm.collectionVariables.set('account_id_dop', acc.id);",
+                  "  if (acc.currency === 'USD') pm.collectionVariables.set('account_id_usd', acc.id);",
+                  "  if (acc.currency === 'EUR') pm.collectionVariables.set('account_id_eur', acc.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetAccounts {\n  accounts {\n    id\n    accountNumber\n    balance\n    currency\n    status\n    client {\n      id\n      firstName\n      lastName\n    }\n    createdAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Lista todas las cuentas con datos del cliente.\nDebe mostrar las 5 cuentas del seed."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Account by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Account has balance', () => pm.expect(body.data.account.balance).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetAccount($id: ID!) {\n  account(id: $id) {\n    id\n    accountNumber\n    balance\n    currency\n    status\n    client {\n      firstName\n      lastName\n      email\n    }\n  }\n}",
+                "variables": "{\n  \"id\": \"{{account_id_dop}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Busca una cuenta específica por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Accounts by Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Returns array', () => pm.expect(body.data.accountsByClient).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetAccountsByClient($clientId: ID!) {\n  accountsByClient(clientId: $clientId) {\n    id\n    accountNumber\n    balance\n    currency\n    status\n  }\n}",
+                "variables": "{\n  \"clientId\": \"{{client_id_2}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Filtra las cuentas de un cliente específico."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Account DOP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const acc = body.data.createAccount;",
+                  "pm.test('Balance starts at 0', () => pm.expect(acc.balance).to.eql(0));",
+                  "pm.test('Currency is DOP', () => pm.expect(acc.currency).to.eql('DOP'));",
+                  "pm.test('Status is ACTIVE', () => pm.expect(acc.status).to.eql('ACTIVE'));",
+                  "pm.collectionVariables.set('account_id_dop_2', acc.id);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateAccountDOP($clientId: String!) {\n  createAccount(input: {\n    clientId: $clientId\n    currency: \"DOP\"\n  }) {\n    id\n    accountNumber\n    balance\n    currency\n    status\n    client { firstName }\n  }\n}",
+                "variables": "{\n  \"clientId\": \"{{client_id_2}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Crea una cuenta en pesos dominicanos para el cliente 2."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Account USD",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.collectionVariables.set('account_id_usd', body.data.createAccount.id);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateAccountUSD($clientId: String!) {\n  createAccount(input: {\n    clientId: $clientId\n    currency: \"USD\"\n  }) {\n    id\n    accountNumber\n    balance\n    currency\n    status\n  }\n}",
+                "variables": "{\n  \"clientId\": \"{{client_id_3}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Crea una cuenta en dólares."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Transactions",
+      "item": [
+        {
+          "name": "Get All Transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('At least 4 transactions from seed', () => pm.expect(body.data.transactions.length).to.be.at.least(4));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetTransactions {\n  transactions {\n    id\n    type\n    amount\n    currency\n    exchangeRate\n    convertedAmount\n    rateType\n    destinationCurrency\n    description\n    sourceAccount {\n      id\n      accountNumber\n      currency\n    }\n    destinationAccount {\n      id\n      accountNumber\n      currency\n    }\n    createdAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Lista todas las transacciones con sus cuentas.\nDebe mostrar las 4 del seed."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transactions by Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Returns array', () => pm.expect(body.data.transactionsByAccount).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetTransactionsByAccount($accountId: ID!) {\n  transactionsByAccount(accountId: $accountId) {\n    id\n    type\n    amount\n    currency\n    description\n    createdAt\n  }\n}",
+                "variables": "{\n  \"accountId\": \"{{account_id_dop}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Historial de transacciones de una cuenta específica (como origen o destino)."
+          },
+          "response": []
+        },
+        {
+          "name": "Deposit DOP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const tx = body.data.deposit;",
+                  "pm.test('Type is DEPOSIT', () => pm.expect(tx.type).to.eql('DEPOSIT'));",
+                  "pm.test('Amount is 10000', () => pm.expect(tx.amount).to.eql(10000));",
+                  "pm.test('Source account has balance', () => pm.expect(tx.sourceAccount.balance).to.be.above(0));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DepositDOP($accountId: String!) {\n  deposit(input: {\n    accountId: $accountId\n    amount: 10000\n    currency: \"DOP\"\n    description: \"Depósito nómina\"\n  }) {\n    id\n    type\n    amount\n    currency\n    description\n    sourceAccount {\n      accountNumber\n      balance\n      currency\n    }\n    createdAt\n  }\n}",
+                "variables": "{\n  \"accountId\": \"{{account_id_dop}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Deposita 10,000 DOP en la cuenta DOP.\nEl balance debe incrementarse."
+          },
+          "response": []
+        },
+        {
+          "name": "Deposit USD",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Type is DEPOSIT', () => pm.expect(body.data.deposit.type).to.eql('DEPOSIT'));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DepositUSD($accountId: String!) {\n  deposit(input: {\n    accountId: $accountId\n    amount: 500\n    currency: \"USD\"\n    description: \"Wire transfer recibido\"\n  }) {\n    id\n    type\n    amount\n    currency\n    sourceAccount { balance currency }\n    createdAt\n  }\n}",
+                "variables": "{\n  \"accountId\": \"{{account_id_usd}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Deposita 500 USD en la cuenta USD."
+          },
+          "response": []
+        },
+        {
+          "name": "Withdrawal DOP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Type is WITHDRAWAL', () => pm.expect(body.data.withdrawal.type).to.eql('WITHDRAWAL'));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation WithdrawalDOP($accountId: String!) {\n  withdrawal(input: {\n    accountId: $accountId\n    amount: 2000\n    description: \"Retiro cajero automático\"\n  }) {\n    id\n    type\n    amount\n    currency\n    description\n    sourceAccount {\n      accountNumber\n      balance\n    }\n    createdAt\n  }\n}",
+                "variables": "{\n  \"accountId\": \"{{account_id_dop}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Retira 2,000 DOP.\nEl balance debe decrementarse."
+          },
+          "response": []
+        },
+        {
+          "name": "Withdrawal - Insufficient Funds (Error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Should have error', () => pm.expect(body.errors).to.not.be.undefined);",
+                  "pm.test('Error is insufficient funds', () => pm.expect(body.errors[0].message).to.include('Insufficient funds'));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation WithdrawalOverdraft($accountId: String!) {\n  withdrawal(input: {\n    accountId: $accountId\n    amount: 9999999\n    description: \"Retiro imposible\"\n  }) {\n    id\n    type\n    amount\n  }\n}",
+                "variables": "{\n  \"accountId\": \"{{account_id_dop}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Intenta retirar más de lo disponible.\nDebe retornar error 'Insufficient funds'."
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer Same Currency (DOP → DOP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const tx = body.data.transfer;",
+                  "pm.test('Type is TRANSFER', () => pm.expect(tx.type).to.eql('TRANSFER'));",
+                  "pm.test('No conversion needed', () => pm.expect(tx.exchangeRate).to.be.null);",
+                  "pm.test('No converted amount', () => pm.expect(tx.convertedAmount).to.be.null);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation TransferDOPtoDOP($sourceId: String!, $destId: String!) {\n  transfer(input: {\n    sourceAccountId: $sourceId\n    destinationAccountId: $destId\n    amount: 3000\n    description: \"Pago de alquiler\"\n  }) {\n    id\n    type\n    amount\n    currency\n    exchangeRate\n    convertedAmount\n    rateType\n    destinationCurrency\n    description\n    sourceAccount { accountNumber balance currency }\n    destinationAccount { accountNumber balance currency }\n    createdAt\n  }\n}",
+                "variables": "{\n  \"sourceId\": \"{{account_id_dop}}\",\n  \"destId\": \"{{account_id_dop_2}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Transferencia entre dos cuentas DOP.\nNo debe haber conversión (exchangeRate y convertedAmount deben ser null)."
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer DOP to USD (with conversion)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const tx = body.data.transfer;",
+                  "pm.test('Type is TRANSFER', () => pm.expect(tx.type).to.eql('TRANSFER'));",
+                  "pm.test('Has exchange rate', () => pm.expect(tx.exchangeRate).to.be.above(0));",
+                  "pm.test('Has converted amount', () => pm.expect(tx.convertedAmount).to.be.above(0));",
+                  "pm.test('Rate type is sell', () => pm.expect(tx.rateType).to.eql('sell'));",
+                  "pm.test('Destination currency is USD', () => pm.expect(tx.destinationCurrency).to.eql('USD'));",
+                  "pm.test('Source currency is DOP', () => pm.expect(tx.currency).to.eql('DOP'));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation TransferDOPtoUSD($sourceId: String!, $destId: String!) {\n  transfer(input: {\n    sourceAccountId: $sourceId\n    destinationAccountId: $destId\n    amount: 5900\n    description: \"Conversión DOP a USD\"\n  }) {\n    id\n    type\n    amount\n    currency\n    exchangeRate\n    convertedAmount\n    rateType\n    destinationCurrency\n    description\n    sourceAccount { accountNumber balance currency }\n    destinationAccount { accountNumber balance currency }\n    createdAt\n  }\n}",
+                "variables": "{\n  \"sourceId\": \"{{account_id_dop}}\",\n  \"destId\": \"{{account_id_usd}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Transferencia con conversión de moneda DOP → USD.\n\nDebe:\n- Debitar 5900 DOP de la cuenta origen\n- Acreditar ~100 USD en la cuenta destino\n- rateType = 'sell' (banco vende USD)\n- exchangeRate = sellRate de DOP→USD\n- destinationCurrency = USD"
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer USD to DOP (with conversion)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const tx = body.data.transfer;",
+                  "pm.test('Rate type is buy', () => pm.expect(tx.rateType).to.eql('buy'));",
+                  "pm.test('Destination currency is DOP', () => pm.expect(tx.destinationCurrency).to.eql('DOP'));",
+                  "pm.test('Converted amount ~5750', () => pm.expect(tx.convertedAmount).to.be.within(5600, 6000));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation TransferUSDtoDOP($sourceId: String!, $destId: String!) {\n  transfer(input: {\n    sourceAccountId: $sourceId\n    destinationAccountId: $destId\n    amount: 100\n    description: \"Conversión USD a DOP\"\n  }) {\n    id\n    type\n    amount\n    currency\n    exchangeRate\n    convertedAmount\n    rateType\n    destinationCurrency\n    sourceAccount { balance currency }\n    destinationAccount { balance currency }\n    createdAt\n  }\n}",
+                "variables": "{\n  \"sourceId\": \"{{account_id_usd}}\",\n  \"destId\": \"{{account_id_dop}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Transferencia USD → DOP.\n\nDebe:\n- Debitar 100 USD\n- Acreditar ~5750 DOP\n- rateType = 'buy' (banco compra USD)"
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer EUR to USD (cross-currency)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "const tx = body.data.transfer;",
+                  "pm.test('Source is EUR', () => pm.expect(tx.currency).to.eql('EUR'));",
+                  "pm.test('Destination is USD', () => pm.expect(tx.destinationCurrency).to.eql('USD'));",
+                  "pm.test('Has exchange rate', () => pm.expect(tx.exchangeRate).to.be.above(0));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation TransferEURtoUSD($sourceId: String!, $destId: String!) {\n  transfer(input: {\n    sourceAccountId: $sourceId\n    destinationAccountId: $destId\n    amount: 100\n    description: \"Conversión EUR a USD\"\n  }) {\n    id\n    type\n    amount\n    currency\n    exchangeRate\n    convertedAmount\n    rateType\n    destinationCurrency\n    sourceAccount { balance currency }\n    destinationAccount { balance currency }\n  }\n}",
+                "variables": "{\n  \"sourceId\": \"{{account_id_eur}}\",\n  \"destId\": \"{{account_id_usd}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Conversión cruzada EUR → USD via DOP.\nConvierte EUR→DOP con buyRate, luego DOP→USD con sellRate."
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer - Account Not Found (Error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Should have error', () => pm.expect(body.errors).to.not.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation TransferNotFound {\n  transfer(input: {\n    sourceAccountId: \"00000000-0000-0000-0000-000000000000\"\n    destinationAccountId: \"00000000-0000-0000-0000-000000000001\"\n    amount: 100\n  }) {\n    id\n    type\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Transferencia con cuenta inexistente — debe retornar NotFoundException."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Balance After Transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('DOP account has balance', () => pm.expect(body.data.dopAccount.balance).to.be.a('number'));",
+                  "pm.test('USD account has balance', () => pm.expect(body.data.usdAccount.balance).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query VerifyBalances($dopId: ID!, $usdId: ID!) {\n  dopAccount: account(id: $dopId) {\n    accountNumber\n    balance\n    currency\n  }\n  usdAccount: account(id: $usdId) {\n    accountNumber\n    balance\n    currency\n  }\n}",
+                "variables": "{\n  \"dopId\": \"{{account_id_dop}}\",\n  \"usdId\": \"{{account_id_usd}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Verifica los balances actuales de las cuentas DOP y USD para confirmar que las transacciones se procesaron correctamente."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - ElasticSearch",
+      "item": [
+        {
+          "name": "Search by Transaction Type - TRANSFER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Returns array', () => pm.expect(body.data.searchTransactions).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchTransfer {\n  searchTransactions(query: \"TRANSFER\")\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Busca transacciones de tipo TRANSFER en ElasticSearch."
+          },
+          "response": []
+        },
+        {
+          "name": "Search by Currency - USD",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchUSD {\n  searchTransactions(query: \"USD\")\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Busca transacciones en dólares."
+          },
+          "response": []
+        },
+        {
+          "name": "Search by Description",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchByDescription {\n  searchTransactions(query: \"nómina\")\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Búsqueda full-text por descripción."
+          },
+          "response": []
+        },
+        {
+          "name": "Search DEPOSIT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchDeposit {\n  searchTransactions(query: \"DEPOSIT\")\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Busca todos los depósitos indexados."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 - Redis Cache Verification",
+      "item": [
+        {
+          "name": "First Call (DB Hit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.globals.set('first_tx_count', body.data.transactions.length);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query AllTransactionsFirst {\n  transactions {\n    id\n    type\n    amount\n    currency\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Primera llamada — va a PostgreSQL.\nRevisa los logs de la app: debes ver queries SQL."
+          },
+          "response": []
+        },
+        {
+          "name": "Second Call (Cache Hit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('No errors', () => pm.expect(body.errors).to.be.undefined);",
+                  "pm.test('Same count as first call (from cache)', () => {",
+                  "  pm.expect(body.data.transactions.length).to.eql(pm.globals.get('first_tx_count'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query AllTransactionsSecond {\n  transactions {\n    id\n    type\n    amount\n    currency\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Segunda llamada — viene de Redis.\nRevisa los logs: NO debes ver queries SQL esta vez.\nMisma cantidad de resultados que la primera llamada."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/graphql"
+    },
+    {
+      "key": "health_url",
+      "value": "http://localhost:3000/health"
+    },
+    {
+      "key": "client_id_1",
+      "value": ""
+    },
+    {
+      "key": "client_id_2",
+      "value": ""
+    },
+    {
+      "key": "client_id_3",
+      "value": ""
+    },
+    {
+      "key": "account_id_dop",
+      "value": ""
+    },
+    {
+      "key": "account_id_usd",
+      "value": ""
+    },
+    {
+      "key": "account_id_eur",
+      "value": ""
+    },
+    {
+      "key": "account_id_dop_2",
+      "value": ""
+    }
+  ]
+}
