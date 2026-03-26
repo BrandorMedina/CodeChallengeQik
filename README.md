@@ -38,10 +38,6 @@ cp .env.example .env
 # 3. Levantar infraestructura (PostgreSQL + Redis + ElasticSearch)
 docker-compose up -d postgres redis elasticsearch
 
-#Genera la migración:
-npx typeorm-ts-node-commonjs -d typeorm.config.ts migration:generate migrations/InitialSchema
-npx typeorm-ts-node-commonjs -d src/typeorm.config.ts migration:generate src/migrations/InitialSchema
-
 # 4. Esperar ~20 segundos a que ElasticSearch esté listo, luego ejecutar migraciones
 npm run migration:run:dev
 
