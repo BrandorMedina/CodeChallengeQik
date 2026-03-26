@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: banco_digital
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: false
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd="curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"'"
+          --health-interval=15s
+          --health-timeout=10s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Esperar servicios
+      - name: Wait for services
+        run: |
+          echo "Waiting for Postgres..."
+          for i in {1..20}; do
+            nc -z localhost 5432 && break
+            sleep 2
+          done
+
+          echo "Waiting for Redis..."
+          for i in {1..20}; do
+            nc -z localhost 6379 && break
+            sleep 2
+          done
+
+          echo "Waiting for Elastic..."
+          for i in {1..30}; do
+            curl -s http://localhost:9200 >/dev/null && break
+            sleep 2
+          done
+
+      # Migraciones
+      - name: Run migrations
+        run: npm run migration:run:dev
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: banco_digital
+
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+          ES_NODE: http://localhost:9200
+
+      # Levantar app (background)
+      - name: 🚀 Start app
+        run: |
+          npm run start:dev &
+          sleep 10
+
+      # E2E TESTS
+      - name: Run e2e tests
+        run: npm run test:e2e
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: banco_digital
+
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+          ES_NODE: http://localhost:9200
