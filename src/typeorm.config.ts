@@ -13,11 +13,18 @@ export default new DataSource({
   username: process.env.DB_USER ?? 'postgres',
   password: process.env.DB_PASSWORD ?? 'postgres',
   database: process.env.DB_NAME ?? 'banco_digital',
+
   entities: [
-    join(__dirname, isCompiled ? 'src' : '', '**/*.entity.{ts,js}'),
+    isCompiled
+      ? join(__dirname, '**/*.entity.js')
+      : join(__dirname, '**/*.entity.ts'),
   ],
+
   migrations: [
-    join(__dirname, isCompiled ? 'migrations' : 'migrations', '*.{ts,js}'),
+    isCompiled
+      ? join(__dirname, 'migrations/*.js')
+      : join(__dirname, 'migrations/*.ts'),
   ],
+
   migrationsTableName: 'migrations_history',
 });
