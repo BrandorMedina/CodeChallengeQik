@@ -20,7 +20,6 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json --detectOpenHandles",
     "migration:generate": "npm run typeorm -- migration:generate src/migrations/Init",
-
     "migration:run:dev": "typeorm-ts-node-commonjs -d src/typeorm.config.ts migration:run",
     "migration:run:prod": "typeorm -d dist/typeorm.config.js migration:run",
     "migration:run": "npm run migration:run:dev",

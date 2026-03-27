@@ -10,7 +10,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    # VARIABLES GLOBALES (FIX PRINCIPAL)
     env:
       DB_HOST: localhost
       DB_PORT: 5432
@@ -73,13 +72,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci
 
       - name: Build project
         run: npm run build
 
-      # Esperar servicios
       - name: Wait for services
         run: |
           echo "Waiting for Postgres..."
@@ -100,20 +98,11 @@ jobs:
             sleep 2
           done
 
-      # Migraciones
       - name: Run migrations
         run: npm run migration:run:dev
 
-      # Levantar app
-      - name: Start app
-        run: |
-          npm run start:dev &
-          sleep 10
-
-      # E2E TESTS
       - name: Run e2e tests
         run: npm run test:e2e
 
-      # Validar Docker build (opcional pero PRO)
       - name: Build Docker image
         run: docker build -t banco-digital .
