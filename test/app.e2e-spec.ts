@@ -1,12 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DataSource } from 'typeorm';
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication;
   let dataSource: DataSource;
 
   beforeAll(async () => {
@@ -29,10 +28,12 @@ describe('AppController (e2e)', () => {
   });
 
   afterAll(async () => {
-    if (dataSource && dataSource.isInitialized) {
+    if (dataSource?.isInitialized) {
       await dataSource.destroy();
     }
 
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 });
